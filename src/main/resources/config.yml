@@ -1,0 +1,53 @@
+# 未明确注释为（可选）的配置均为必选配置
+
+# 自然区域
+areas:
+  # 区域唯一标识
+  example:
+    # 名称
+    name: 示例区域
+    # 世界
+    world: world
+    # 出生点
+    spawn: 0,-1,0
+    # 区域
+    region:
+      # 第一角（x,y,z)
+      first: -7,4,-7
+      # 第二角（x,y,z)
+      second: 23,10,23
+    # 刷新相关
+    refresh:
+      # 模式（NORMAL：全区域刷新；FILL：空白区域刷新）
+      mode: NORMAL
+      # 间隔（单位：分钟）
+      interval: 60
+      # 刷新后执行的动作
+      # 格式为：'玩家选择器 命令'
+      # 可用占位符：
+      #   {world}：世界名
+      #   {area}：区域名
+      #   {player}：玩家名
+      # 可用玩家选择器：
+      #   @none：无玩家，由后台执行
+      #   @server：服务器内玩家
+      #   @world：世界内玩家
+      #   @area：区域内玩家
+      actions:
+      - '@server nra send §a世界§e {world}§a 的资源区域§b {area} §a已刷新！'
+    # 白名单方块
+    whitelist:
+    - 'minecraft:ladder'
+    # 内容方块
+    resources:
+      'minecraft:ice': 0.05
+      'minecraft:sea_lantern': 0.05
+      'minecraft:web': 0.05
+      'minecraft:emerald_ore': 0.01
+      'minecraft:stone': 0.3
+      'minecraft:grass': 0.05
+      'minecraft:log$0': 0.05
+      'minecraft:log$1': 0.05
+      'minecraft:log$2': 0.05
+      'minecraft:glowstone': 0.05
+      'minecraft:diamond_ore': 0.03

@@ -1,0 +1,13 @@
+# noinspection YAMLSchemaValidation
+name: natural-resource-area
+version: '${version}'
+main: pers.ketikai.minecraft.spigot.naturalresourcearea.NaturalResourceArea
+load: POSTWORLD
+authors:
+- ketikai
+depend:
+- minecraft-next
+commands:
+  natural-resource-area:
+    aliases:
+    - nra
