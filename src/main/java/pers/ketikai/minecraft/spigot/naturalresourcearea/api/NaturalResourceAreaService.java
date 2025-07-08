@@ -21,6 +21,7 @@ package pers.ketikai.minecraft.spigot.naturalresourcearea.api;
 import java.util.List;
 import org.bukkit.entity.Player;
 import team.idealstate.sugar.validate.annotation.NotNull;
+import team.idealstate.sugar.validate.annotation.Nullable;
 
 public interface NaturalResourceAreaService {
 
@@ -30,4 +31,7 @@ public interface NaturalResourceAreaService {
 
     @NotNull
     List<String> getAreas();
+
+    @Nullable
+    Long getRefreshCountdown(@NotNull String area);
 }

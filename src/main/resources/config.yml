@@ -1,4 +1,6 @@
 # 未明确注释为（可选）的配置均为必选配置
+# 已提供 PAPI 变量：
+#   %nra_refresh_countdown_{area}%
 
 # 自然区域
 areas:
@@ -22,25 +24,37 @@ areas:
       mode: NORMAL
       # 间隔（单位：分钟）
       interval: 60
-      # 刷新后执行的动作
-      # 格式为：'玩家选择器 命令'
-      # 可用占位符：
-      #   {world}：世界名
-      #   {area}：区域名
-      #   {player}：玩家名
-      # 可用玩家选择器：
-      #   @none：无玩家，由后台执行
-      #   @server：服务器内玩家
-      #   @world：世界内玩家
-      #   @area：区域内玩家
-      actions:
+      # 倒计时动作（单位：秒）
+      countdown:
+        # 倒数第几秒执行
+        # 格式为：'玩家选择器 命令'
+        # 可用占位符：
+        #   {world}：世界名
+        #   {area}：区域名
+        #   {player}：玩家名
+        #   {countdown}：倒计时
+        # 可用玩家选择器：
+        #   @none：无玩家，由后台执行
+        #   @server：服务器内玩家
+        #   @world：世界内玩家
+        #   @area：区域内玩家
+        60: &action '@server nra send §a世界§e {world}§a 的资源区域§b {area} §a将在§e {countdown} §a秒后刷新……'
+        30: *action
+        10: *action
+        5: *action
+        4: *action
+        3: *action
+        2: *action
+        1: *action
+      # 完成时动作
+      finish:
       - '@server nra send §a世界§e {world}§a 的资源区域§b {area} §a已刷新！'
     # 白名单方块
     whitelist:
     - 'minecraft:ladder'
     # 内容方块
     resources:
-      'minecraft:ice': 0.05
+      'minecraft:air': 0.05
       'minecraft:sea_lantern': 0.05
       'minecraft:web': 0.05
       'minecraft:emerald_ore': 0.01

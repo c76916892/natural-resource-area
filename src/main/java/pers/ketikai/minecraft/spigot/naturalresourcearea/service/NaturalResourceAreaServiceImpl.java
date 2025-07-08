@@ -26,7 +26,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -49,6 +53,7 @@ import team.idealstate.sugar.next.context.aware.ContextHolderAware;
 import team.idealstate.sugar.next.context.lifecycle.Initializable;
 import team.idealstate.sugar.validate.Validation;
 import team.idealstate.sugar.validate.annotation.NotNull;
+import team.idealstate.sugar.validate.annotation.Nullable;
 
 @Service
 public class NaturalResourceAreaServiceImpl
@@ -57,9 +62,26 @@ public class NaturalResourceAreaServiceImpl
                 ContextHolderAware,
                 Initializable {
 
-    private final Map<String, Long> refreshRecords = new ConcurrentHashMap<>();
+    private final Map<String, RefreshRecord> refreshRecords = new ConcurrentHashMap<>();
     private volatile ContextHolder contextHolder;
     private volatile NaturalResourceAreaConfiguration configuration;
+
+    @Nullable
+    @Override
+    public Long getRefreshCountdown(@NotNull String area) {
+        Validation.notNullOrBlank(area, "area must not be null or blank.");
+        NaturalResourceAreaConfiguration.Area area1 = configuration.getAreas().get(area);
+        if (area1 == null) {
+            return null;
+        }
+        NaturalResourceAreaConfiguration.Refresh refresh = area1.getRefresh();
+        RefreshRecord record = refreshRecords.get(area);
+        long countdown = refresh.getInterval() * 60L * 1000L;
+        if (record != null) {
+            countdown = ((record.getTimestamp() + countdown) - System.currentTimeMillis()) / 1000L;
+        }
+        return countdown;
+    }
 
     @Override
     public void initialize() {
@@ -69,8 +91,8 @@ public class NaturalResourceAreaServiceImpl
                 () -> {
                     configuration.getAreas().keySet().forEach(a -> refresh(a, false));
                 },
-                20L,
-                20L);
+                2L,
+                2L);
     }
 
     @Override
@@ -92,41 +114,56 @@ public class NaturalResourceAreaServiceImpl
         }
         long now = System.currentTimeMillis();
         NaturalResourceAreaConfiguration.Refresh refresh = area1.getRefresh();
-        if (!force) {
-            Long last = refreshRecords.get(area);
-            if (last != null) {
-                long next = last + refresh.getInterval() * 60L * 1000L;
-                if (now < next) {
-                    return false;
-                }
-            }
-        }
         String world = area1.getWorld();
         World world1 = Bukkit.getWorld(world);
         List<Player> worldPlayers = world1.getPlayers();
-        if (!worldPlayers.isEmpty()) {
-            NaturalResourceAreaConfiguration.Region region = area1.getRegion();
-            int minX = region.getMinX();
-            int maxX = region.getMaxX();
-            int minY = region.getMinY();
-            int maxY = region.getMaxY();
-            int minZ = region.getMinZ();
-            int maxZ = region.getMaxZ();
+        RefreshRecord record = refreshRecords.get(area);
+        long countdown = Math.max(refresh.getInterval(), 1L) * 60L;
+        if (record != null) {
+            countdown = ((record.getTimestamp() + (countdown * 1000L)) - now) / 1000L;
+        } else {
+            record = new RefreshRecord(now);
+        }
+        boolean inCountdown = !force && countdown > 0L;
 
-            List<Player> areaPlayers = new ArrayList<>();
-            for (Player player : worldPlayers) {
-                Location loc = player.getLocation();
-                if (loc.getWorld().getName().equals(world)
-                        && loc.getX() >= minX
-                        && loc.getX() <= maxX
-                        && loc.getY() >= minY
-                        && loc.getY() <= maxY
-                        && loc.getZ() >= minZ
-                        && loc.getZ() <= maxZ) {
-                    areaPlayers.add(player);
-                }
+        NaturalResourceAreaConfiguration.Action countdownAction =
+                refresh.getCountdown().get(countdown);
+        if (inCountdown && (countdownAction == null || !record.getCountdowns().add(countdown))) {
+            refreshRecords.put(area, record);
+            return false;
+        }
+
+        NaturalResourceAreaConfiguration.Region region = area1.getRegion();
+        int minX = region.getMinX();
+        int maxX = region.getMaxX();
+        int minY = region.getMinY();
+        int maxY = region.getMaxY();
+        int minZ = region.getMinZ();
+        int maxZ = region.getMaxZ();
+
+        List<Player> areaPlayers = new ArrayList<>();
+        for (Player player : worldPlayers) {
+            Location loc = player.getLocation();
+            if (loc.getWorld().getName().equals(world)
+                    && loc.getX() >= minX
+                    && loc.getX() <= maxX
+                    && loc.getY() >= minY
+                    && loc.getY() <= maxY
+                    && loc.getZ() >= minZ
+                    && loc.getZ() <= maxZ) {
+                areaPlayers.add(player);
             }
+        }
 
+        Map<String, String> variables = new HashMap<>();
+        variables.put("{world}", world);
+        variables.put("{area}", area1.getName());
+        variables.put("{countdown}", String.valueOf(countdown));
+        if (inCountdown) {
+            executeAction(worldPlayers, areaPlayers, variables, countdownAction);
+        } else {
+            record.setTimestamp(now);
+            record.getCountdowns().clear();
             List<Block> areaBlocks = new ArrayList<>();
             boolean loaded = false;
             for (int x = minX; x <= maxX; x++) {
@@ -190,42 +227,48 @@ public class NaturalResourceAreaServiceImpl
                     }
                 }
 
-                Map<String, String> variables = new HashMap<>();
-                variables.put("{world}", world);
-                variables.put("{area}", area1.getName());
-                for (NaturalResourceAreaConfiguration.Action action : refresh.getActions()) {
-                    Collection<? extends Player> players = null;
-                    switch (action.getSelector()) {
-                        case SERVER:
-                            players = Bukkit.getOnlinePlayers();
-                            break;
-                        case WORLD:
-                            players = worldPlayers;
-                            break;
-                        case AREA:
-                            players = areaPlayers;
-                            break;
-                    }
-                    String command = action.getCommand();
-                    for (Map.Entry<String, String> entry : variables.entrySet()) {
-                        command = command.replace(entry.getKey(), entry.getValue());
-                    }
-                    try {
-                        if (players == null) {
-                            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
-                        } else {
-                            for (Player player : players) {
-                                Bukkit.dispatchCommand(player, command.replace("{player}", player.getName()));
-                            }
-                        }
-                    } catch (CommandException e) {
-                        Log.error(e);
-                    }
+                for (NaturalResourceAreaConfiguration.Action action : refresh.getFinish()) {
+                    executeAction(worldPlayers, areaPlayers, variables, action);
                 }
             }
         }
-        refreshRecords.put(area, now);
+
+        refreshRecords.put(area, record);
         return true;
+    }
+
+    private void executeAction(
+            List<Player> worldPlayers,
+            List<Player> areaPlayers,
+            Map<String, String> variables,
+            NaturalResourceAreaConfiguration.Action action) {
+        Collection<? extends Player> players = null;
+        switch (action.getSelector()) {
+            case SERVER:
+                players = Bukkit.getOnlinePlayers();
+                break;
+            case WORLD:
+                players = worldPlayers;
+                break;
+            case AREA:
+                players = areaPlayers;
+                break;
+        }
+        String command = action.getCommand();
+        for (Map.Entry<String, String> entry : variables.entrySet()) {
+            command = command.replace(entry.getKey(), entry.getValue());
+        }
+        try {
+            if (players == null) {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+            } else {
+                for (Player player : players) {
+                    Bukkit.dispatchCommand(player, command.replace("{player}", player.getName()));
+                }
+            }
+        } catch (CommandException e) {
+            Log.error(e);
+        }
     }
 
     @Override
@@ -265,5 +308,13 @@ public class NaturalResourceAreaServiceImpl
     @Override
     public void setConfiguration(@NotNull NaturalResourceAreaConfiguration configuration) {
         this.configuration = configuration;
+    }
+
+    @Data
+    @AllArgsConstructor
+    private static class RefreshRecord {
+
+        private final Set<Long> countdowns = new CopyOnWriteArraySet<>();
+        private long timestamp;
     }
 }

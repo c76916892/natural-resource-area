@@ -124,8 +124,12 @@ public class NaturalResourceAreaConfiguration {
         private final Integer interval;
 
         @NonNull
+        @JsonDeserialize(keyAs = Long.class, contentAs = Action.class)
+        private final Map<Long, Action> countdown;
+
+        @NonNull
         @JsonDeserialize(contentAs = Action.class)
-        private final List<Action> actions;
+        private final List<Action> finish;
     }
 
     @Data
